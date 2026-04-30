@@ -1,6 +1,6 @@
 # Mileage Reimbursement Tool
 
-Custom replacement for the Monday WorkForm mileage intake. Employees enter their home address, primary workplace, trip stops, and trip days. The app calculates actual driving miles, applies the commute deduction rule, and can create a Monday item on a separate test board.
+Next.js replacement for the Monday WorkForm mileage intake. Employees enter their home address, primary workplace, trip stops, and trip days. The app calculates actual driving miles, applies the commute deduction rule, and can create a Monday item on a separate test board.
 
 ## Current MVP
 
@@ -12,6 +12,7 @@ Custom replacement for the Monday WorkForm mileage intake. Employees enter their
 - Server-side Monday `create_item` submission
 - Browser draft saving
 - Quick-address dropdowns for common workplaces and trip stops
+- Next.js App Router UI and API route handlers
 
 ## Setup
 
@@ -27,6 +28,8 @@ npm run dev
 ```
 
 Then open `http://localhost:3000`.
+
+The app also binds to `http://127.0.0.1:3000` in local development.
 
 Without `GOOGLE_MAPS_API_KEY`, the app runs in manual mode: each trip day needs an Actual miles override. Once the key is set, the same form calculates route miles from the entered addresses.
 
@@ -79,7 +82,8 @@ Blank column env vars are skipped, so you can start with just a few columns and 
 ## API Notes
 
 - Monday API requests are made from the Node server so the Monday token is not exposed in the browser.
-- Google Routes requests are also made from the Node server for billing and key control.
+- Monday API requests are made from Next.js route handlers so the Monday token is not exposed in the browser.
+- Google Routes requests are also made from Next.js route handlers for billing and key control.
 - Browser autocomplete is optional and uses `GOOGLE_MAPS_BROWSER_KEY`.
 
 Sources used while planning:

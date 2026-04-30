@@ -21,7 +21,12 @@
   box-sizing: border-box;
 }
 
+html {
+  min-height: 100%;
+}
+
 body {
+  min-height: 100%;
   margin: 0;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0) 220px),
@@ -318,10 +323,6 @@ textarea:focus {
   color: #34423e;
 }
 
-.trip-notes {
-  margin-top: 12px;
-}
-
 .summary-header {
   align-items: flex-start;
 }
@@ -462,7 +463,6 @@ textarea:focus {
 }
 
 .submit-message {
-  display: none;
   margin-top: 12px;
   background: var(--green-soft);
   color: var(--green);
@@ -470,13 +470,13 @@ textarea:focus {
 }
 
 .submit-message.error {
-  display: block;
   background: var(--rose-soft);
   color: var(--rose);
 }
 
 .submit-message.ready {
-  display: block;
+  background: var(--green-soft);
+  color: var(--green);
 }
 
 .action-row {
