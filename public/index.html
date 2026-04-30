@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mileage Reimbursement</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Work mileage</p>
+          <h1>Mileage Reimbursement</h1>
+        </div>
+        <div class="system-status" aria-live="polite">
+          <span id="routesStatus" class="status-pill muted">Routes: checking</span>
+          <span id="mondayStatus" class="status-pill muted">Monday: checking</span>
+        </div>
+      </header>
+
+      <main class="layout">
+        <form id="mileageForm" class="workspace" autocomplete="on">
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>Employee</h2>
+              <button type="button" class="secondary-button compact" id="saveDraftButton">Save draft</button>
+            </div>
+            <div class="field-grid three">
+              <label>
+                <span>Name</span>
+                <input id="name" name="name" required>
+              </label>
+              <label>
+                <span>Requester email</span>
+                <input id="requesterEmail" name="requesterEmail" type="email" required>
+              </label>
+              <label>
+                <span>Position</span>
+                <input id="position" name="position">
+              </label>
+              <label>
+                <span>Approver email</span>
+                <input id="approverEmail" name="approverEmail" type="email">
+              </label>
+              <label>
+                <span>Payroll email</span>
+                <input id="payrollEmail" name="payrollEmail" type="email">
+              </label>
+              <label>
+                <span>Primary workplace</span>
+                <select id="primaryWorkplace" name="primaryWorkplace"></select>
+              </label>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>Commute</h2>
+              <button type="button" class="secondary-button compact" id="loadDemoButton">Load demo</button>
+            </div>
+            <div class="field-grid two">
+              <label>
+                <span>Home address</span>
+                <input id="homeAddress" class="address-input" name="homeAddress">
+              </label>
+              <label>
+                <span>Primary workplace address</span>
+                <select id="workplaceAddressPreset" name="workplaceAddressPreset"></select>
+                <input id="workplaceAddress" class="address-input" name="workplaceAddress">
+              </label>
+              <label>
+                <span>One-way commute miles</span>
+                <input id="commuteMilesOneWay" name="commuteMilesOneWay" type="number" min="0" step="0.1" placeholder="Auto or manual">
+              </label>
+              <label>
+                <span>Reimbursement rate</span>
+                <input id="reimbursementRate" name="reimbursementRate" type="number" min="0" step="0.001" placeholder="Optional">
+              </label>
+            </div>
+            <label class="full-field">
+              <span>Deduction rule</span>
+              <select id="deductionPolicy" name="deductionPolicy">
+                <option value="home_boundary">Home boundary legs</option>
+                <option value="round_trip_per_day">Round trip per day</option>
+                <option value="field_only">Field departure only</option>
+                <option value="none">No commute deduction</option>
+              </select>
+            </label>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>Trip Days</h2>
+              <button type="button" class="primary-button compact" id="addTripButton">+ Add day</button>
+            </div>
+            <div id="tripList" class="trip-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>Notes</h2>
+            </div>
+            <label class="full-field">
+              <span>Submission notes</span>
+              <textarea id="notes" name="notes" rows="3"></textarea>
+            </label>
+          </section>
+        </form>
+
+        <aside class="summary-panel" aria-live="polite">
+          <div class="summary-header">
+            <div>
+              <p class="eyebrow">Review</p>
+              <h2>Submission total</h2>
+            </div>
+            <div class="total-badge">
+              <span id="reimbursableMiles">0.0</span>
+              <small>miles</small>
+            </div>
+          </div>
+
+          <div class="metric-grid">
+            <div>
+              <span>Actual</span>
+              <strong id="actualMiles">0.0</strong>
+            </div>
+            <div>
+              <span>Deduction</span>
+              <strong id="deductionMiles">0.0</strong>
+            </div>
+            <div>
+              <span>Amount</span>
+              <strong id="reimbursementAmount">-</strong>
+            </div>
+          </div>
+
+          <div class="route-visual" aria-hidden="true">
+            <div class="route-line"></div>
+            <div class="route-node home">H</div>
+            <div class="route-node work">W</div>
+            <div class="route-node stop">S</div>
+          </div>
+
+          <div id="tripResults" class="result-list"></div>
+          <div id="warningList" class="warning-list"></div>
+          <div id="submitMessage" class="submit-message"></div>
+
+          <div class="action-row">
+            <button type="button" class="secondary-button" id="calculateButton">Calculate miles</button>
+            <button type="button" class="primary-button" id="submitButton">Submit to Monday</button>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
