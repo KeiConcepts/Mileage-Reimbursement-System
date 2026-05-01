@@ -79,6 +79,8 @@ Blank column env vars are skipped, so you can start with just a few columns and 
 - `field_only`: subtract one-way commute only when home is next to a non-office stop.
 - `none`: do not subtract commute miles.
 
+Home is not counted as a reimbursable mileage endpoint. If a trip starts or ends at home, Home is used to determine the commute deduction, while actual reimbursable route mileage is calculated from the work locations in the trip.
+
 ## API Notes
 
 - Monday API requests are made from the Node server so the Monday token is not exposed in the browser.

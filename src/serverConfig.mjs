@@ -21,7 +21,6 @@ export async function calculateWithConfiguredProvider(payload) {
 
 export function getClientConfig() {
   return {
-    googleMapsBrowserKey: process.env.GOOGLE_MAPS_BROWSER_KEY || "",
     routesConfigured: Boolean(process.env.GOOGLE_MAPS_API_KEY),
     mondayConfigured: mondayIsConfigured(),
     workplaceNames: getWorkplaceNames(),

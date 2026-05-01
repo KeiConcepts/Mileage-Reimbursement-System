@@ -99,12 +99,13 @@ export async function calculateMileageSubmission(input, distanceProvider) {
 export async function calculateTrip(trip, profile, settings, distanceProvider) {
   const warnings = [];
   const routePoints = buildRoutePoints(trip, profile);
-  const routeLabel = routePoints.map((point) => point.label).join(" to ");
+  const billableRoutePoints = buildBillableRoutePoints(routePoints);
+  const routeLabel = billableRoutePoints.map((point) => point.label).join(" to ");
   const manualActualMiles = readMiles(trip.manualActualMiles);
   const actualMiles =
     manualActualMiles !== null
       ? manualActualMiles
-      : await getDistanceMiles(routePoints, distanceProvider, `actual route for ${trip.date || "trip"}`);
+      : await getDistanceMiles(billableRoutePoints, distanceProvider, `actual route for ${trip.date || "trip"}`);
 
   if (manualActualMiles !== null) {
     warnings.push(`Used manually entered actual miles for ${trip.date || "one trip"}.`);
@@ -126,12 +127,20 @@ export async function calculateTrip(trip, profile, settings, distanceProvider) {
     notes: trip.notes || "",
     routeLabel,
     routePoints,
+    billableRoutePoints,
     actualMiles: roundMiles(actualMiles),
     commuteMiles: roundMiles(commuteMiles),
     commuteDeductionMiles: roundMiles(commuteDeductionMiles),
     reimbursableMiles: roundMiles(reimbursableMiles),
     warnings
   };
+}
+
+export function buildBillableRoutePoints(routePoints) {
+  return routePoints.filter((point, index) => {
+    const isEndpoint = index === 0 || index === routePoints.length - 1;
+    return !(isEndpoint && point.kind === "home");
+  });
 }
 
 export function buildRoutePoints(trip, profile) {

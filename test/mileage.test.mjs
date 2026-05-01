@@ -134,3 +134,60 @@ test("none policy skips commute lookup", async () => {
   assert.equal(result.totals.commuteDeductionMiles, 0);
   assert.equal(result.totals.reimbursableMiles, 12);
 });
+
+test("home endpoint is excluded from billable route and used for commute deduction", async () => {
+  const result = await calculateMileageSubmission(
+    {
+      profile: { ...profile, commuteMilesOneWay: "" },
+      settings: { deductionPolicy: DEDUCTION_POLICIES.HOME_BOUNDARY },
+      trips: [
+        {
+          id: "trip-1",
+          date: "2026-05-01",
+          startType: "office",
+          stops: [{ label: "Client", address: "300 Client Rd" }],
+          endType: "home",
+          endAddress: ""
+        }
+      ]
+    },
+    async (addresses) => {
+      if (addresses.join("|") === "100 Home St|200 Office Ave") return 10;
+      assert.deepEqual(addresses, ["200 Office Ave", "300 Client Rd"]);
+      return 24;
+    }
+  );
+
+  assert.equal(result.trips[0].routeLabel, "KEI HQ to Client");
+  assert.equal(result.totals.actualMiles, 24);
+  assert.equal(result.totals.commuteDeductionMiles, 10);
+  assert.equal(result.totals.reimbursableMiles, 14);
+});
+
+test("home to client to home bills only the client route before commute deduction", async () => {
+  const result = await calculateMileageSubmission(
+    {
+      profile: { ...profile, commuteMilesOneWay: "" },
+      settings: { deductionPolicy: DEDUCTION_POLICIES.HOME_BOUNDARY },
+      trips: [
+        {
+          id: "trip-1",
+          date: "2026-05-01",
+          startType: "home",
+          stops: [{ label: "Client", address: "300 Client Rd" }],
+          endType: "home"
+        }
+      ]
+    },
+    async (addresses) => {
+      if (addresses.join("|") === "100 Home St|200 Office Ave") return 10;
+      assert.deepEqual(addresses, ["300 Client Rd"]);
+      return 0;
+    }
+  );
+
+  assert.equal(result.trips[0].routeLabel, "Client");
+  assert.equal(result.totals.actualMiles, 0);
+  assert.equal(result.totals.commuteDeductionMiles, 20);
+  assert.equal(result.totals.reimbursableMiles, 0);
+});

@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 const STORAGE_KEY = "mileage-reimbursement-draft-v1";
 
 const defaultConfig = {
-  googleMapsBrowserKey: "",
   routesConfigured: false,
   mondayConfigured: false,
   workplaceNames: [],
@@ -37,6 +36,7 @@ export default function MileageApp() {
   const [data, setData] = useState(defaultData);
   const [calculation, setCalculation] = useState(null);
   const [message, setMessage] = useState({ text: "", kind: "" });
+  const [configLoaded, setConfigLoaded] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -47,6 +47,7 @@ export default function MileageApp() {
       const nextConfig = await fetchJson("/api/config").catch(() => defaultConfig);
       if (!active) return;
       setConfig(nextConfig);
+      setConfigLoaded(true);
 
       const draft = loadDraft();
       if (draft) {
@@ -65,27 +66,6 @@ export default function MileageApp() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!config.googleMapsBrowserKey || typeof window === "undefined") return;
-
-    window.initMileagePlaces = () => attachAutocomplete(setData);
-    if (window.google?.maps?.places) {
-      attachAutocomplete(setData);
-      return;
-    }
-
-    if (document.querySelector("script[data-google-places-script='true']")) return;
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(config.googleMapsBrowserKey)}&libraries=places&callback=initMileagePlaces&loading=async`;
-    script.async = true;
-    script.dataset.googlePlacesScript = "true";
-    document.head.appendChild(script);
-  }, [config.googleMapsBrowserKey, data.trips.length]);
-
-  useEffect(() => {
-    attachAutocomplete(setData);
-  }, [data, config.googleMapsBrowserKey]);
-
   const workplaceOptions = useMemo(() => {
     const presetNames = config.locationPresets.map((location) => location.name);
     return config.workplaceNames.length ? config.workplaceNames : presetNames;
@@ -93,6 +73,7 @@ export default function MileageApp() {
 
   const workplaceAddressPreset = findPresetValueByAddress(config.locationPresets, data.profile.workplaceAddress);
   const canSubmit = config.mondayConfigured && !isSubmitting;
+  const routesStatus = configLoaded ? (config.routesConfigured ? "ready" : "needs key") : "checking";
 
   function updateProfile(field, value) {
     setData((current) => {
@@ -246,6 +227,12 @@ export default function MileageApp() {
   async function calculateMiles() {
     clearMessage();
 
+    const validationError = getRouteValidationError(data);
+    if (validationError) {
+      setMessage({ text: validationError, kind: "error" });
+      return;
+    }
+
     if (!config.routesConfigured && hasTripsMissingManualMiles(data.trips)) {
       setMessage({
         text: "Automatic route mileage needs GOOGLE_MAPS_API_KEY in .env. Until that key is added, enter an Actual miles override for each trip day.",
@@ -298,8 +285,8 @@ export default function MileageApp() {
           <h1>Mileage Reimbursement</h1>
         </div>
         <div className="system-status" aria-live="polite">
-          <span className={`status-pill ${config.routesConfigured ? "ready" : "warning"}`}>
-            Routes: {config.routesConfigured ? "ready" : "needs key"}
+          <span className={`status-pill ${configLoaded && config.routesConfigured ? "ready" : configLoaded ? "warning" : ""}`}>
+            Routes: {routesStatus}
           </span>
           <span className={`status-pill ${config.mondayConfigured ? "ready" : "warning"}`}>
             Monday: {config.mondayConfigured ? "ready" : "not set"}
@@ -435,6 +422,7 @@ export default function MileageApp() {
                     onAddStop={addStop}
                     onRemoveStop={removeStop}
                     onRemoveTrip={removeTrip}
+                    profile={data.profile}
                   />
                 ))
               ) : (
@@ -479,14 +467,11 @@ function TextField({ label, value, onChange, addressField, ...props }) {
   return (
     <label>
       <span>{label}</span>
-      <input
-        {...props}
-        className={addressField ? "address-input" : undefined}
-        value={value}
-        data-address-autocomplete={addressField ? "true" : undefined}
-        data-profile-address-field={addressField}
-        onChange={(event) => onChange(event.target.value)}
-      />
+      {addressField ? (
+        <AddressInput {...props} value={value} onChange={onChange} />
+      ) : (
+        <input {...props} value={value} onChange={(event) => onChange(event.target.value)} />
+      )}
     </label>
   );
 }
@@ -495,6 +480,7 @@ function TripEditor({
   trip,
   index,
   locationPresets,
+  profile,
   onTripChange,
   onStopChange,
   onStopPreset,
@@ -515,8 +501,8 @@ function TripEditor({
 
       <div className="trip-grid">
         <TextField label="Date" type="date" value={trip.date} onChange={(value) => onTripChange(trip.id, "date", value)} />
-        <EndpointEditor prefix="start" trip={trip} onTripChange={onTripChange} />
-        <EndpointEditor prefix="end" trip={trip} onTripChange={onTripChange} />
+        <EndpointEditor prefix="start" trip={trip} profile={profile} onTripChange={onTripChange} />
+        <EndpointEditor prefix="end" trip={trip} profile={profile} onTripChange={onTripChange} />
       </div>
 
       <div className="stops">
@@ -559,12 +545,18 @@ function TripEditor({
   );
 }
 
-function EndpointEditor({ prefix, trip, onTripChange }) {
+function EndpointEditor({ prefix, trip, profile, onTripChange }) {
   const typeField = `${prefix}Type`;
   const addressField = `${prefix}Address`;
   const labelField = `${prefix}Label`;
   const isOther = trip[typeField] === "other";
   const label = prefix === "start" ? "Start" : "End";
+  const savedAddress =
+    trip[typeField] === "home"
+      ? profile.homeAddress || "Uses saved home address"
+      : trip[typeField] === "office"
+        ? profile.workplaceAddress || "Uses saved workplace address"
+        : trip[addressField];
 
   return (
     <div className="input-group">
@@ -575,15 +567,11 @@ function EndpointEditor({ prefix, trip, onTripChange }) {
           <option value="office">Primary workplace</option>
           <option value="other">Other</option>
         </select>
-        <input
-          className="address-input"
-          value={trip[addressField]}
+        <AddressInput
+          value={isOther ? trip[addressField] : savedAddress}
           disabled={!isOther}
           placeholder={isOther ? "Other address" : "Uses saved address"}
-          data-address-autocomplete={isOther ? "true" : undefined}
-          data-trip-id={trip.id}
-          data-trip-address-field={addressField}
-          onChange={(event) => onTripChange(trip.id, addressField, event.target.value)}
+          onChange={(value) => onTripChange(trip.id, addressField, value)}
         />
       </div>
       {isOther ? (
@@ -616,15 +604,7 @@ function StopEditor({ tripId, stop, locationPresets, onStopChange, onStopPreset,
       </label>
       <label>
         <span>Address</span>
-        <input
-          className="address-input"
-          value={stop.address}
-          data-address-autocomplete="true"
-          data-trip-id={tripId}
-          data-stop-id={stop.id}
-          data-stop-address-field="address"
-          onChange={(event) => onStopChange(tripId, stop.id, "address", event.target.value)}
-        />
+        <AddressInput value={stop.address} onChange={(value) => onStopChange(tripId, stop.id, "address", value)} />
       </label>
       <button type="button" className="icon-button" onClick={() => onRemoveStop(tripId, stop.id)} aria-label="Remove stop">
         x
@@ -707,58 +687,78 @@ function Metric({ label, value }) {
   );
 }
 
-function attachAutocomplete(setData) {
-  if (typeof window === "undefined" || !window.google?.maps?.places) return;
+function AddressInput({ value, onChange, disabled, placeholder }) {
+  const [suggestions, setSuggestions] = useState([]);
+  const [isFocused, setIsFocused] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  for (const input of document.querySelectorAll("input[data-address-autocomplete='true']:not([disabled])")) {
-    if (input.dataset.autocompleteAttached) continue;
-    const autocomplete = new window.google.maps.places.Autocomplete(input, {
-      componentRestrictions: { country: "us" },
-      fields: ["formatted_address", "name"]
-    });
-    autocomplete.addListener("place_changed", () => {
-      const place = autocomplete.getPlace();
-      const value = place.formatted_address || place.name || input.value;
-      setData((current) => applyAutocompleteValue(current, input, value));
-    });
-    input.dataset.autocompleteAttached = "true";
-  }
-}
+  useEffect(() => {
+    if (disabled || !isFocused || String(value || "").trim().length < 3) {
+      setSuggestions([]);
+      setIsLoading(false);
+      return;
+    }
 
-function applyAutocompleteValue(current, input, value) {
-  const profileField = input.dataset.profileAddressField;
-  if (profileField) {
-    return {
-      ...current,
-      profile: { ...current.profile, [profileField]: value }
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setIsLoading(true);
+      try {
+        const result = await fetchJson(`/api/places/autocomplete?input=${encodeURIComponent(value)}`, {
+          signal: controller.signal
+        });
+        setSuggestions(result.suggestions || []);
+      } catch (error) {
+        if (error.name !== "AbortError") setSuggestions([]);
+      } finally {
+        setIsLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
     };
+  }, [disabled, isFocused, value]);
+
+  function selectSuggestion(address) {
+    onChange(address);
+    setSuggestions([]);
+    setIsFocused(false);
   }
 
-  const tripId = input.dataset.tripId;
-  const tripField = input.dataset.tripAddressField;
-  if (tripId && tripField) {
-    return {
-      ...current,
-      trips: current.trips.map((trip) => (trip.id === tripId ? { ...trip, [tripField]: value } : trip))
-    };
-  }
+  const shouldShowSuggestions = isFocused && (suggestions.length > 0 || isLoading);
 
-  const stopId = input.dataset.stopId;
-  const stopField = input.dataset.stopAddressField;
-  if (tripId && stopId && stopField) {
-    return {
-      ...current,
-      trips: current.trips.map((trip) => {
-        if (trip.id !== tripId) return trip;
-        return {
-          ...trip,
-          stops: trip.stops.map((stop) => (stop.id === stopId ? { ...stop, [stopField]: value } : stop))
-        };
-      })
-    };
-  }
-
-  return current;
+  return (
+    <div className="autocomplete-wrap">
+      <input
+        className="address-input"
+        value={value}
+        disabled={disabled}
+        placeholder={placeholder}
+        autoComplete="off"
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setTimeout(() => setIsFocused(false), 120)}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {shouldShowSuggestions ? (
+        <div className="autocomplete-menu" role="listbox">
+          {isLoading ? <div className="autocomplete-loading">Searching addresses</div> : null}
+          {suggestions.map((suggestion) => (
+            <button
+              key={suggestion.id || suggestion.address}
+              type="button"
+              className="autocomplete-option"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => selectSuggestion(suggestion.address)}
+            >
+              <strong>{suggestion.mainText || suggestion.address}</strong>
+              {suggestion.secondaryText ? <span>{suggestion.secondaryText}</span> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function createTrip(tripId = createId(), stopId = createId()) {
@@ -831,6 +831,31 @@ function hasTripsMissingManualMiles(trips) {
     const value = Number(trip.manualActualMiles);
     return trip.manualActualMiles === "" || !Number.isFinite(value) || value < 0;
   });
+}
+
+function getRouteValidationError(data) {
+  const profile = data.profile || {};
+  for (const trip of data.trips || []) {
+    const date = trip.date || "one trip";
+    if ((trip.startType === "home" || trip.endType === "home") && !profile.homeAddress) {
+      return `Add a Home address before calculating ${date}. Home is used for commute deduction, not as a reimbursable mileage endpoint.`;
+    }
+    if ((trip.startType === "office" || trip.endType === "office") && !profile.workplaceAddress) {
+      return `Add a Primary workplace address before calculating ${date}.`;
+    }
+    if (trip.startType === "other" && !trip.startAddress) {
+      return `Add the custom start address for ${date}, or change Start to Home or Primary workplace.`;
+    }
+    if (trip.endType === "other" && !trip.endAddress) {
+      return `Add the custom end address for ${date}, or change End to Home or Primary workplace.`;
+    }
+    const incompleteStop = (trip.stops || []).find((stop) => stop.label && !stop.address);
+    if (incompleteStop) {
+      return `Add an address for ${incompleteStop.label} on ${date}.`;
+    }
+  }
+
+  return "";
 }
 
 function normalizeText(value) {
