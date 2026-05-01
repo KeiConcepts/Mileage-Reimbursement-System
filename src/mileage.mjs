@@ -137,10 +137,11 @@ export async function calculateTrip(trip, profile, settings, distanceProvider) {
 }
 
 export function buildBillableRoutePoints(routePoints) {
-  return routePoints.filter((point, index) => {
-    const isEndpoint = index === 0 || index === routePoints.length - 1;
-    return !(isEndpoint && point.kind === "home");
-  });
+  if (routePoints.length > 1 && routePoints[routePoints.length - 1]?.kind === "home") {
+    return routePoints.slice(0, -1);
+  }
+
+  return routePoints;
 }
 
 export function buildRoutePoints(trip, profile) {
@@ -247,5 +248,5 @@ export function getCommuteDeductionMiles(trip, routePoints, commuteMiles, policy
     return (morningFieldDeparture ? commuteMiles : 0) + (eveningFieldReturn ? commuteMiles : 0);
   }
 
-  return (startsAtHome ? commuteMiles : 0) + (endsAtHome ? commuteMiles : 0);
+  return startsAtHome ? commuteMiles : 0;
 }

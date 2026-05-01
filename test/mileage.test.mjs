@@ -10,7 +10,7 @@ const profile = {
   commuteMilesOneWay: 10
 };
 
-test("home boundary policy subtracts one-way commute for each home boundary", async () => {
+test("home boundary policy subtracts one-way commute for home departure only", async () => {
   const result = await calculateMileageSubmission({
     profile,
     settings: { deductionPolicy: DEDUCTION_POLICIES.HOME_BOUNDARY },
@@ -27,8 +27,8 @@ test("home boundary policy subtracts one-way commute for each home boundary", as
   });
 
   assert.equal(result.totals.actualMiles, 52);
-  assert.equal(result.totals.commuteDeductionMiles, 20);
-  assert.equal(result.totals.reimbursableMiles, 32);
+  assert.equal(result.totals.commuteDeductionMiles, 10);
+  assert.equal(result.totals.reimbursableMiles, 42);
 });
 
 test("field-only policy subtracts commute only when home is next to a non-office stop", async () => {
@@ -135,7 +135,7 @@ test("none policy skips commute lookup", async () => {
   assert.equal(result.totals.reimbursableMiles, 12);
 });
 
-test("home endpoint is excluded from billable route and used for commute deduction", async () => {
+test("ending home is excluded from billable route and used only for trip context", async () => {
   const result = await calculateMileageSubmission(
     {
       profile: { ...profile, commuteMilesOneWay: "" },
@@ -160,11 +160,11 @@ test("home endpoint is excluded from billable route and used for commute deducti
 
   assert.equal(result.trips[0].routeLabel, "KEI HQ to Client");
   assert.equal(result.totals.actualMiles, 24);
-  assert.equal(result.totals.commuteDeductionMiles, 10);
-  assert.equal(result.totals.reimbursableMiles, 14);
+  assert.equal(result.totals.commuteDeductionMiles, 0);
+  assert.equal(result.totals.reimbursableMiles, 24);
 });
 
-test("home to client to home bills only the client route before commute deduction", async () => {
+test("home to client to home bills home to client before commute deduction", async () => {
   const result = await calculateMileageSubmission(
     {
       profile: { ...profile, commuteMilesOneWay: "" },
@@ -181,13 +181,59 @@ test("home to client to home bills only the client route before commute deductio
     },
     async (addresses) => {
       if (addresses.join("|") === "100 Home St|200 Office Ave") return 10;
-      assert.deepEqual(addresses, ["300 Client Rd"]);
-      return 0;
+      assert.deepEqual(addresses, ["100 Home St", "300 Client Rd"]);
+      return 18;
     }
   );
 
-  assert.equal(result.trips[0].routeLabel, "Client");
-  assert.equal(result.totals.actualMiles, 0);
-  assert.equal(result.totals.commuteDeductionMiles, 20);
-  assert.equal(result.totals.reimbursableMiles, 0);
+  assert.equal(result.trips[0].routeLabel, "Home to Client");
+  assert.equal(result.totals.actualMiles, 18);
+  assert.equal(result.totals.commuteDeductionMiles, 10);
+  assert.equal(result.totals.reimbursableMiles, 8);
+});
+
+test("example route includes home departure and subtracts normal commute once", async () => {
+  const exampleProfile = {
+    ...profile,
+    homeAddress: "715 12th Street, Huntington Beach, CA",
+    workplaceAddress: "17011 Beach Blvd Unit 676, Huntington Beach, CA 92647",
+    primaryWorkplace: "KEI HQ",
+    commuteMilesOneWay: ""
+  };
+
+  const result = await calculateMileageSubmission(
+    {
+      profile: exampleProfile,
+      settings: { deductionPolicy: DEDUCTION_POLICIES.HOME_BOUNDARY },
+      trips: [
+        {
+          id: "trip-1",
+          date: "2026-05-01",
+          startType: "home",
+          stops: [
+            { label: "Aliso Creek Road", address: "26513 Aliso Creek Road" },
+            { label: "KEI HQ", address: exampleProfile.workplaceAddress },
+            { label: "SUP BP", address: "5141 Beach Blvd Unit B, Buena Park, CA 90621" }
+          ],
+          endType: "office"
+        }
+      ]
+    },
+    async (addresses) => {
+      if (addresses.join("|") === `${exampleProfile.homeAddress}|${exampleProfile.workplaceAddress}`) return 3;
+      assert.deepEqual(addresses, [
+        exampleProfile.homeAddress,
+        "26513 Aliso Creek Road",
+        exampleProfile.workplaceAddress,
+        "5141 Beach Blvd Unit B, Buena Park, CA 90621",
+        exampleProfile.workplaceAddress
+      ]);
+      return 74;
+    }
+  );
+
+  assert.equal(result.trips[0].routeLabel, "Home to Aliso Creek Road to KEI HQ to SUP BP to KEI HQ");
+  assert.equal(result.totals.actualMiles, 74);
+  assert.equal(result.totals.commuteDeductionMiles, 3);
+  assert.equal(result.totals.reimbursableMiles, 71);
 });

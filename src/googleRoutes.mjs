@@ -23,6 +23,9 @@ export async function getGoogleRouteMiles(addresses, apiKey) {
       intermediates: cleaned.slice(1, -1).map((address) => ({ address })),
       travelMode: "DRIVE",
       routingPreference: "TRAFFIC_UNAWARE",
+      routeModifiers: {
+        avoidTolls: true
+      },
       units: "IMPERIAL"
     })
   });

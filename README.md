@@ -79,13 +79,14 @@ Blank column env vars are skipped, so you can start with just a few columns and 
 - `field_only`: subtract one-way commute only when home is next to a non-office stop.
 - `none`: do not subtract commute miles.
 
-Home is not counted as a reimbursable mileage endpoint. If a trip starts or ends at home, Home is used to determine the commute deduction, while actual reimbursable route mileage is calculated from the work locations in the trip.
+If a trip starts at Home, the Home-to-first-stop leg is included in actual route miles and the normal Home-to-primary-workplace commute is deducted once. If a trip ends at Home, the final commute-home leg is not included in actual route miles.
 
 ## API Notes
 
 - Monday API requests are made from the Node server so the Monday token is not exposed in the browser.
 - Monday API requests are made from Next.js route handlers so the Monday token is not exposed in the browser.
 - Google Routes requests are also made from Next.js route handlers for billing and key control.
+- Google Routes requests avoid toll roads by default.
 - Browser autocomplete is optional and uses `GOOGLE_MAPS_BROWSER_KEY`.
 
 Sources used while planning:
