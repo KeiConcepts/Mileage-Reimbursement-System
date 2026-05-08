@@ -1,12 +1,5 @@
 const METERS_PER_MILE = 1609.344;
 
-export const DEDUCTION_POLICIES = {
-  HOME_BOUNDARY: "home_boundary",
-  ROUND_TRIP_PER_DAY: "round_trip_per_day",
-  FIELD_ONLY: "field_only",
-  NONE: "none"
-};
-
 export function metersToMiles(meters) {
   return Number(meters) / METERS_PER_MILE;
 }
@@ -53,13 +46,12 @@ export function getPeriodBounds(trips) {
 
 export async function calculateMileageSubmission(input, distanceProvider) {
   const profile = input.profile || {};
-  const settings = input.settings || {};
   const trips = Array.isArray(input.trips) ? input.trips : [];
   const calculatedTrips = [];
   const warnings = [];
 
   for (const trip of trips) {
-    const calculated = await calculateTrip(trip, profile, settings, distanceProvider);
+    const calculated = await calculateTrip(trip, profile, distanceProvider);
     calculatedTrips.push(calculated);
     warnings.push(...calculated.warnings);
   }
@@ -79,42 +71,34 @@ export async function calculateMileageSubmission(input, distanceProvider) {
     reimbursableMiles: roundMiles(totals.reimbursableMiles)
   };
 
-  const reimbursementRate = readMiles(profile.reimbursementRate);
-  const reimbursementAmount =
-    reimbursementRate === null ? null : Math.round(roundedTotals.reimbursableMiles * reimbursementRate * 100) / 100;
   const period = getPeriodBounds(calculatedTrips);
 
   return {
     trips: calculatedTrips,
-    totals: {
-      ...roundedTotals,
-      reimbursementAmount
-    },
+    totals: roundedTotals,
     period,
     warnings: [...new Set(warnings)],
     summary: createSubmissionSummary(profile, calculatedTrips, roundedTotals)
   };
 }
 
-export async function calculateTrip(trip, profile, settings, distanceProvider) {
+export async function calculateTrip(trip, profile, distanceProvider) {
   const warnings = [];
   const routePoints = buildRoutePoints(trip, profile);
-  const billableRoutePoints = buildBillableRoutePoints(routePoints);
-  const routeLabel = billableRoutePoints.map((point) => point.label).join(" to ");
+  const actualRoutePoints = routePoints;
+  const routeLabel = actualRoutePoints.map((point) => point.label).join(" to ");
   const manualActualMiles = readMiles(trip.manualActualMiles);
   const actualMiles =
     manualActualMiles !== null
       ? manualActualMiles
-      : await getDistanceMiles(billableRoutePoints, distanceProvider, `actual route for ${trip.date || "trip"}`);
+      : await getDistanceMiles(actualRoutePoints, distanceProvider, `actual route for ${trip.date || "trip"}`);
 
   if (manualActualMiles !== null) {
     warnings.push(`Used manually entered actual miles for ${trip.date || "one trip"}.`);
   }
 
-  const commuteMiles = shouldCalculateCommute(routePoints, settings.deductionPolicy)
-    ? await getCommuteMiles(profile, distanceProvider, warnings)
-    : 0;
-  const commuteDeductionMiles = getCommuteDeductionMiles(trip, routePoints, commuteMiles, settings.deductionPolicy);
+  const commuteMiles = shouldCalculateCommute(routePoints) ? await getCommuteMiles(profile, distanceProvider) : 0;
+  const commuteDeductionMiles = getCommuteDeductionMiles(routePoints, commuteMiles);
   const reimbursableMiles = Math.max(0, actualMiles - commuteDeductionMiles);
 
   if (commuteDeductionMiles > actualMiles) {
@@ -127,21 +111,13 @@ export async function calculateTrip(trip, profile, settings, distanceProvider) {
     notes: trip.notes || "",
     routeLabel,
     routePoints,
-    billableRoutePoints,
+    actualRoutePoints,
     actualMiles: roundMiles(actualMiles),
     commuteMiles: roundMiles(commuteMiles),
     commuteDeductionMiles: roundMiles(commuteDeductionMiles),
     reimbursableMiles: roundMiles(reimbursableMiles),
     warnings
   };
-}
-
-export function buildBillableRoutePoints(routePoints) {
-  if (routePoints.length > 1 && routePoints[routePoints.length - 1]?.kind === "home") {
-    return routePoints.slice(0, -1);
-  }
-
-  return routePoints;
 }
 
 export function buildRoutePoints(trip, profile) {
@@ -202,51 +178,25 @@ export async function getDistanceMiles(points, distanceProvider, label) {
   return distanceProvider(addresses);
 }
 
-export async function getCommuteMiles(profile, distanceProvider, warnings) {
-  const manualCommuteMiles = readMiles(profile.commuteMilesOneWay);
-  if (manualCommuteMiles !== null) {
-    warnings.push("Used manually entered one-way commute miles.");
-    return manualCommuteMiles;
-  }
-
+export async function getCommuteMiles(profile, distanceProvider) {
   if (!profile.homeAddress || !profile.workplaceAddress) {
-    warnings.push("Home or workplace address is missing; commute deduction used 0 miles.");
-    return 0;
+    throw new Error("Home and Primary workplace addresses are required for the commute deduction.");
   }
 
   if (!distanceProvider) {
-    warnings.push("Google Routes is not configured; commute deduction used 0 miles.");
-    return 0;
+    throw new Error("Automatic commute deduction needs GOOGLE_MAPS_API_KEY because this trip starts or ends at Home.");
   }
 
   return distanceProvider([profile.homeAddress, profile.workplaceAddress]);
 }
 
-export function shouldCalculateCommute(routePoints, policy = DEDUCTION_POLICIES.HOME_BOUNDARY) {
-  if (policy === DEDUCTION_POLICIES.NONE) return false;
-  const startsAtHome = routePoints[0]?.kind === "home";
-  const endsAtHome = routePoints[routePoints.length - 1]?.kind === "home";
-  if (policy === DEDUCTION_POLICIES.ROUND_TRIP_PER_DAY) return startsAtHome || endsAtHome;
-  return startsAtHome || endsAtHome;
+export function shouldCalculateCommute(routePoints) {
+  return routePoints[0]?.kind === "home" || routePoints[routePoints.length - 1]?.kind === "home";
 }
 
-export function getCommuteDeductionMiles(trip, routePoints, commuteMiles, policy = DEDUCTION_POLICIES.HOME_BOUNDARY) {
-  if (!commuteMiles || policy === DEDUCTION_POLICIES.NONE) return 0;
-
+export function getCommuteDeductionMiles(routePoints, commuteMiles) {
+  if (!commuteMiles) return 0;
   const startsAtHome = routePoints[0]?.kind === "home";
   const endsAtHome = routePoints[routePoints.length - 1]?.kind === "home";
-  const firstStop = routePoints[1];
-  const previousStop = routePoints[routePoints.length - 2];
-
-  if (policy === DEDUCTION_POLICIES.ROUND_TRIP_PER_DAY) {
-    return startsAtHome || endsAtHome ? commuteMiles * 2 : 0;
-  }
-
-  if (policy === DEDUCTION_POLICIES.FIELD_ONLY) {
-    const morningFieldDeparture = startsAtHome && firstStop && firstStop.kind !== "office";
-    const eveningFieldReturn = endsAtHome && previousStop && previousStop.kind !== "office";
-    return (morningFieldDeparture ? commuteMiles : 0) + (eveningFieldReturn ? commuteMiles : 0);
-  }
-
-  return startsAtHome ? commuteMiles : 0;
+  return (startsAtHome ? commuteMiles : 0) + (endsAtHome ? commuteMiles : 0);
 }

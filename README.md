@@ -8,7 +8,7 @@ Next.js replacement for the Monday WorkForm mileage intake. Employees enter thei
 - Home, primary workplace, and custom stop routing
 - Manual mileage override for testing without Google Maps
 - Server-side Google Routes API calculation
-- Configurable commute deduction policy
+- Automatic commute deduction based on Home and Primary workplace
 - Server-side Monday `create_item` submission
 - Browser draft saving
 - Quick-address dropdowns for common workplaces and trip stops
@@ -17,11 +17,10 @@ Next.js replacement for the Monday WorkForm mileage intake. Employees enter thei
 ## Setup
 
 1. Copy `.env.example` to `.env`.
-2. Add `GOOGLE_MAPS_API_KEY` when you want automatic routing.
-3. Add `GOOGLE_MAPS_BROWSER_KEY` when you want address autocomplete.
-4. Create your separate Monday test board.
-5. Add `MONDAY_API_TOKEN`, `MONDAY_BOARD_ID`, and any column IDs you want populated.
-6. Run:
+2. Add `GOOGLE_MAPS_API_KEY` for routing, commute deduction, and address autocomplete.
+3. Create your separate Monday test board.
+4. Add `MONDAY_API_TOKEN`, `MONDAY_BOARD_ID`, and any column IDs you want populated.
+5. Run:
 
 ```bash
 npm run dev
@@ -31,7 +30,7 @@ Then open `http://localhost:3000`.
 
 The app also binds to `http://127.0.0.1:3000` in local development.
 
-Without `GOOGLE_MAPS_API_KEY`, the app runs in manual mode: each trip day needs an Actual miles override. Once the key is set, the same form calculates route miles from the entered addresses.
+Without `GOOGLE_MAPS_API_KEY`, a trip can only calculate when it does not need automatic route miles or a Home commute deduction. In normal use, set the key so the app can calculate both the actual route and the Home-to-primary-workplace deduction.
 
 ## Quick Addresses
 
@@ -72,14 +71,15 @@ Create one item per reimbursement request. Suggested columns:
 
 Blank column env vars are skipped, so you can start with just a few columns and expand the board later.
 
-## Deduction Rules
+## Deduction Rule
 
-- `home_boundary`: subtract one one-way commute when a trip starts at home and one when it ends at home.
-- `round_trip_per_day`: subtract two one-way commutes for each home-based trip day.
-- `field_only`: subtract one-way commute only when home is next to a non-office stop.
-- `none`: do not subtract commute miles.
+The calculator uses the Home and Primary workplace addresses to infer the commute deduction automatically:
 
-If a trip starts at Home, the Home-to-first-stop leg is included in actual route miles and the normal Home-to-primary-workplace commute is deducted once. If a trip ends at Home, the final commute-home leg is not included in actual route miles.
+- If a trip starts at Home, the Home-to-first-work-stop leg is included in actual miles and one normal Home-to-primary-workplace commute is deducted.
+- If a trip starts at the Primary workplace, no starting commute is deducted.
+- If a trip ends at Home, the last-work-stop-to-Home leg is included in actual miles and one normal primary-workplace-to-Home commute is deducted.
+- If a trip starts and ends at Home, two one-way commute deductions are applied.
+- Reimbursable miles never go below `0`.
 
 ## API Notes
 
@@ -87,7 +87,7 @@ If a trip starts at Home, the Home-to-first-stop leg is included in actual route
 - Monday API requests are made from Next.js route handlers so the Monday token is not exposed in the browser.
 - Google Routes requests are also made from Next.js route handlers for billing and key control.
 - Google Routes requests avoid toll roads by default.
-- Browser autocomplete is optional and uses `GOOGLE_MAPS_BROWSER_KEY`.
+- Browser autocomplete is served through the Next.js API and uses `GOOGLE_MAPS_API_KEY`.
 
 Sources used while planning:
 

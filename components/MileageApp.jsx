@@ -19,14 +19,11 @@ const defaultProfile = {
   payrollEmail: "accounting@keiconcepts.info",
   primaryWorkplace: "",
   homeAddress: "",
-  workplaceAddress: "",
-  commuteMilesOneWay: "",
-  reimbursementRate: ""
+  workplaceAddress: ""
 };
 
 const defaultData = {
   profile: defaultProfile,
-  settings: { deductionPolicy: "home_boundary" },
   notes: "",
   trips: [createTrip("trip-1", "stop-1")]
 };
@@ -97,14 +94,6 @@ export default function MileageApp() {
         primaryWorkplace: location.name,
         workplaceAddress: location.address
       }
-    }));
-    clearMessage();
-  }
-
-  function updateSettings(field, value) {
-    setData((current) => ({
-      ...current,
-      settings: { ...current.settings, [field]: value }
     }));
     clearMessage();
   }
@@ -204,11 +193,8 @@ export default function MileageApp() {
         payrollEmail: "accounting@keiconcepts.info",
         primaryWorkplace: workplace.name,
         homeAddress: "100 Spectrum Center Dr, Irvine, CA",
-        workplaceAddress: workplace.address,
-        commuteMilesOneWay: "",
-        reimbursementRate: ""
+        workplaceAddress: workplace.address
       },
-      settings: { deductionPolicy: "home_boundary" },
       notes: "",
       trips: [
         {
@@ -230,6 +216,14 @@ export default function MileageApp() {
     const validationError = getRouteValidationError(data);
     if (validationError) {
       setMessage({ text: validationError, kind: "error" });
+      return;
+    }
+
+    if (!config.routesConfigured && hasHomeBoundaryTrip(data.trips)) {
+      setMessage({
+        text: "Automatic commute deduction needs GOOGLE_MAPS_API_KEY when a trip starts or ends at Home.",
+        kind: "error"
+      });
       return;
     }
 
@@ -371,34 +365,7 @@ export default function MileageApp() {
                   onChange={(event) => updateProfile("workplaceAddress", event.target.value)}
                 />
               </label>
-              <TextField
-                label="One-way commute miles"
-                type="number"
-                min="0"
-                step="0.1"
-                placeholder="Auto or manual"
-                value={data.profile.commuteMilesOneWay}
-                onChange={(value) => updateProfile("commuteMilesOneWay", value)}
-              />
-              <TextField
-                label="Reimbursement rate"
-                type="number"
-                min="0"
-                step="0.001"
-                placeholder="Optional"
-                value={data.profile.reimbursementRate}
-                onChange={(value) => updateProfile("reimbursementRate", value)}
-              />
             </div>
-            <label className="full-field">
-              <span>Deduction rule</span>
-              <select value={data.settings.deductionPolicy} onChange={(event) => updateSettings("deductionPolicy", event.target.value)}>
-                <option value="home_boundary">Home boundary legs</option>
-                <option value="round_trip_per_day">Round trip per day</option>
-                <option value="field_only">Field departure only</option>
-                <option value="none">No commute deduction</option>
-              </select>
-            </label>
           </section>
 
           <section className="panel">
@@ -632,10 +599,7 @@ function SummaryPanel({ calculation, message, canSubmit, isCalculating, isSubmit
       <div className="metric-grid">
         <Metric label="Actual" value={formatMiles(totals.actualMiles)} />
         <Metric label="Deduction" value={formatMiles(totals.commuteDeductionMiles)} />
-        <Metric
-          label="Amount"
-          value={totals.reimbursementAmount === null || totals.reimbursementAmount === undefined ? "-" : `$${totals.reimbursementAmount.toFixed(2)}`}
-        />
+        <Metric label="Reimbursable" value={formatMiles(totals.reimbursableMiles)} />
       </div>
 
       <div className="route-visual" aria-hidden="true">
@@ -797,7 +761,6 @@ function loadDraft() {
     if (!draft.profile || !Array.isArray(draft.trips)) return null;
     return {
       profile: { ...defaultProfile, ...draft.profile },
-      settings: { deductionPolicy: "home_boundary", ...(draft.settings || {}) },
       notes: typeof draft.notes === "string" ? draft.notes : "",
       trips: draft.trips.length ? draft.trips : [createTrip()]
     };
@@ -833,12 +796,19 @@ function hasTripsMissingManualMiles(trips) {
   });
 }
 
+function hasHomeBoundaryTrip(trips) {
+  return trips.some((trip) => trip.startType === "home" || trip.endType === "home");
+}
+
 function getRouteValidationError(data) {
   const profile = data.profile || {};
   for (const trip of data.trips || []) {
     const date = trip.date || "one trip";
     if ((trip.startType === "home" || trip.endType === "home") && !profile.homeAddress) {
-      return `Add a Home address before calculating ${date}. Home is used for commute deduction, not as a reimbursable mileage endpoint.`;
+      return `Add a Home address before calculating ${date}. Home is used for route miles and the commute deduction.`;
+    }
+    if ((trip.startType === "home" || trip.endType === "home") && !profile.workplaceAddress) {
+      return `Add a Primary workplace address before calculating ${date}. It is used for the Home commute deduction.`;
     }
     if ((trip.startType === "office" || trip.endType === "office") && !profile.workplaceAddress) {
       return `Add a Primary workplace address before calculating ${date}.`;

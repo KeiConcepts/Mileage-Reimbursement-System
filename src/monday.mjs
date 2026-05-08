@@ -6,7 +6,6 @@ export function mondayIsConfigured(env = process.env) {
 
 export function buildMondayColumnValues(request, calculation, env = process.env) {
   const profile = request.profile || {};
-  const settings = request.settings || {};
   const totals = calculation.totals || {};
   const period = calculation.period || {};
   const values = {};
@@ -24,8 +23,7 @@ export function buildMondayColumnValues(request, calculation, env = process.env)
   set(values, env.MONDAY_COL_COMMUTE_DEDUCTION, totals.commuteDeductionMiles);
   set(values, env.MONDAY_COL_REIMBURSABLE_MILES, totals.reimbursableMiles);
   set(values, env.MONDAY_COL_TRIP_DAYS, calculation.trips?.length || 0);
-  set(values, env.MONDAY_COL_REIMBURSEMENT_AMOUNT, totals.reimbursementAmount);
-  set(values, env.MONDAY_COL_NOTES, request.notes || settings.notes);
+  set(values, env.MONDAY_COL_NOTES, request.notes);
   set(values, env.MONDAY_COL_STATUS, env.MONDAY_STATUS_LABEL ? { label: env.MONDAY_STATUS_LABEL } : null);
 
   return values;
