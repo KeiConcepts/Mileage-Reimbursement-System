@@ -1,4 +1,16 @@
 const MONDAY_ENDPOINT = "https://api.monday.com/v2";
+const PRIMARY_WORKPLACE_MONDAY_LABELS = {
+  "VOX Fountain Valley": "VOX FV",
+  "VOX South Coast Plaza": "VOX SCP",
+  "SUP Buena Park": "SUP BP",
+  "SUP Irvine": "SUP IR",
+  "NEP Irvine": "NEP IR",
+  "NEP Fountain Valley": "NEP FV",
+  "ROL Fountain Valley": "ROL FV",
+  "ROL Irvine": "ROL IR",
+  Qua: "QUA",
+  "Kei Coffee House": "KCH"
+};
 
 export function mondayIsConfigured(env = process.env) {
   return Boolean(env.MONDAY_API_TOKEN && env.MONDAY_BOARD_ID);
@@ -14,7 +26,7 @@ export function buildMondayColumnValues(request, calculation, env = process.env)
   set(values, env.MONDAY_COL_APPROVER_EMAIL, asEmail(profile.approverEmail));
   set(values, env.MONDAY_COL_PAYROLL_EMAIL, asEmail(profile.payrollEmail));
   set(values, env.MONDAY_COL_POSITION, profile.position);
-  set(values, env.MONDAY_COL_PRIMARY_WORKPLACE, profile.primaryWorkplace);
+  set(values, env.MONDAY_COL_PRIMARY_WORKPLACE, asLabel(getPrimaryWorkplaceMondayLabel(profile)));
   set(values, env.MONDAY_COL_SUBMISSION_DATE, asDate(new Date().toISOString().slice(0, 10)));
   set(values, env.MONDAY_COL_PERIOD_START, asDate(period.start));
   set(values, env.MONDAY_COL_PERIOD_END, asDate(period.end));
@@ -24,7 +36,6 @@ export function buildMondayColumnValues(request, calculation, env = process.env)
   set(values, env.MONDAY_COL_REIMBURSABLE_MILES, totals.reimbursableMiles);
   set(values, env.MONDAY_COL_TRIP_DAYS, calculation.trips?.length || 0);
   set(values, env.MONDAY_COL_NOTES, request.notes);
-  set(values, env.MONDAY_COL_STATUS, env.MONDAY_STATUS_LABEL ? { label: env.MONDAY_STATUS_LABEL } : null);
 
   return values;
 }
@@ -35,8 +46,7 @@ export async function submitMileageToMonday(request, calculation, env = process.
   }
 
   const profile = request.profile || {};
-  const period = calculation.period || {};
-  const itemName = buildItemName(profile, period);
+  const itemName = buildItemName(profile);
   const columnValues = buildMondayColumnValues(request, calculation, env);
   const hasGroup = Boolean(env.MONDAY_GROUP_ID);
   const mutation = hasGroup
@@ -79,13 +89,8 @@ export async function submitMileageToMonday(request, calculation, env = process.
   return body.data.create_item;
 }
 
-function buildItemName(profile, period) {
-  const name = profile.name || "Mileage request";
-  if (period.start && period.end && period.start !== period.end) {
-    return `Mileage - ${name} - ${period.start} to ${period.end}`;
-  }
-  if (period.start) return `Mileage - ${name} - ${period.start}`;
-  return `Mileage - ${name}`;
+export function buildItemName(profile) {
+  return profile.name || "Mileage request";
 }
 
 function set(values, columnId, value) {
@@ -101,4 +106,14 @@ function asEmail(email) {
 function asDate(date) {
   if (!date) return null;
   return { date };
+}
+
+function asLabel(label) {
+  if (!label) return null;
+  return { label };
+}
+
+function getPrimaryWorkplaceMondayLabel(profile) {
+  if (profile.primaryWorkplaceMondayLabel) return profile.primaryWorkplaceMondayLabel;
+  return PRIMARY_WORKPLACE_MONDAY_LABELS[profile.primaryWorkplace] || profile.primaryWorkplace;
 }

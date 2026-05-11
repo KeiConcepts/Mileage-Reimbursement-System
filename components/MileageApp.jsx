@@ -18,6 +18,7 @@ const defaultProfile = {
   approverEmail: "",
   payrollEmail: "accounting@keiconcepts.info",
   primaryWorkplace: "",
+  primaryWorkplaceMondayLabel: "",
   homeAddress: "",
   workplaceAddress: ""
 };
@@ -77,6 +78,7 @@ export default function MileageApp() {
       const profile = { ...current.profile, [field]: value };
       if (field === "primaryWorkplace") {
         const location = findPresetByWorkplaceName(config.locationPresets, value);
+        profile.primaryWorkplaceMondayLabel = location?.mondayLabel || value;
         if (location) profile.workplaceAddress = location.address;
       }
       return { ...current, profile };
@@ -92,6 +94,7 @@ export default function MileageApp() {
       profile: {
         ...current.profile,
         primaryWorkplace: location.name,
+        primaryWorkplaceMondayLabel: location.mondayLabel || location.name,
         workplaceAddress: location.address
       }
     }));
@@ -192,6 +195,7 @@ export default function MileageApp() {
         approverEmail: "approver@example.com",
         payrollEmail: "accounting@keiconcepts.info",
         primaryWorkplace: workplace.name,
+        primaryWorkplaceMondayLabel: workplace.mondayLabel || workplace.name,
         homeAddress: "100 Spectrum Center Dr, Irvine, CA",
         workplaceAddress: workplace.address
       },
@@ -780,7 +784,13 @@ function findPresetByName(locationPresets, name) {
 }
 
 function findPresetByWorkplaceName(locationPresets, name) {
-  return locationPresets.find((location) => normalizeText(location.name) === normalizeText(name));
+  const normalizedName = normalizeText(name);
+  return locationPresets.find(
+    (location) =>
+      normalizeText(location.name) === normalizedName ||
+      normalizeText(location.mondayLabel) === normalizedName ||
+      (location.aliases || []).some((alias) => normalizeText(alias) === normalizedName)
+  );
 }
 
 function findPresetValueByAddress(locationPresets, address) {
